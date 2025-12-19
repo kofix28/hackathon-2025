@@ -19,6 +19,10 @@ def compress_image(image_file, max_width=800):
     Handles PNG transparency to prevent crashes.
     """
     try:
+        # CRITICAL FIX: Reset file pointer to the beginning.
+        # This fixes the issue where camera images appear blank or missing.
+        image_file.seek(0)
+
         image = Image.open(image_file)
 
         # 1. FIX PNG CRASH: Convert RGBA (Transparent) to RGB (Solid)
@@ -93,7 +97,6 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
     doc.add_paragraph()
 
     # --- 2. DETAILED FINDINGS ---
-    # Dynamic Heading
     heading_text = "2. DEFENSIVE REBUTTAL & FINDINGS" if report_mode == 'defensive' else "2. FINDINGS & DEFECTS"
     doc.add_heading(t(heading_text), level=1)
 
@@ -104,7 +107,7 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
         except:
             table.style = 'Table Grid'
 
-        # --- DYNAMIC HEADERS ---
+        # --- HEADERS ---
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = t("ID")
         hdr_cells[1].text = t("Category")
@@ -117,7 +120,7 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
         hdr_cells[3].text = t("Standard")
         hdr_cells[4].text = t("Severity")
 
-        # Fill Data
+        # --- FILL DATA ---
         for i, defect in enumerate(defect_list):
             row_cells = table.add_row().cells
             row_cells[0].text = str(i + 1).zfill(2)
@@ -180,43 +183,25 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
 
 
 def get_calendar_month_data(year=None, month=None):
-    """
-    Returns calendar data for a given month.
-    Returns day numbers, dates, and weekday indices for the current month.
-    
-    Args:
-        year: Year (defaults to current year)
-        month: Month (defaults to current month)
-    
-    Returns:
-        dict with keys:
-            - 'days': list of dicts with 'day', 'date' (YYYY-MM-DD), 'weekday' (0=Monday)
-            - 'month_name': full month name
-            - 'year': year
-            - 'month': month number
-    """
+    """Returns calendar data for the CRM."""
     today = date.today()
-    if year is None:
-        year = today.year
-    if month is None:
-        month = today.month
-    
-    # Get first day of month and number of days
+    if year is None: year = today.year
+    if month is None: month = today.month
+
     first_day_weekday, num_days = monthrange(year, month)
-    # Convert from Monday=0 to Sunday=0 (calendar module uses Monday=0)
     first_day_weekday = (first_day_weekday + 1) % 7
-    
+
     days = []
     for day in range(1, num_days + 1):
         day_date = date(year, month, day)
         days.append({
             'day': day,
             'date': day_date.strftime('%Y-%m-%d'),
-            'weekday': day_date.weekday()  # Monday=0, Sunday=6
+            'weekday': day_date.weekday()
         })
-    
+
     month_name = date(year, month, 1).strftime('%B')
-    
+
     return {
         'days': days,
         'month_name': month_name,
@@ -225,28 +210,3 @@ def get_calendar_month_data(year=None, month=None):
         'first_day_weekday': first_day_weekday,
         'num_days': num_days
     }
-
-
-def format_event_time(time_str):
-    """
-    Formats time string for display.
-    
-    Args:
-        time_str: Time in HH:MM format
-    
-    Returns:
-        Formatted time string (e.g., "2:30 PM" or "14:30")
-    """
-    try:
-        # Parse HH:MM format
-        hour, minute = map(int, time_str.split(':'))
-        if hour == 0:
-            return f"12:{minute:02d} AM"
-        elif hour < 12:
-            return f"{hour}:{minute:02d} AM"
-        elif hour == 12:
-            return f"12:{minute:02d} PM"
-        else:
-            return f"{hour - 12}:{minute:02d} PM"
-    except:
-        return time_str
