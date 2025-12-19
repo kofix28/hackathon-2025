@@ -8,7 +8,8 @@ from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from deep_translator import GoogleTranslator
-from datetime import datetime
+from datetime import datetime, date
+from calendar import monthrange
 from PIL import Image
 
 
@@ -148,3 +149,76 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
     doc.save(buffer)
     buffer.seek(0)
     return buffer
+
+
+def get_calendar_month_data(year=None, month=None):
+    """
+    Returns calendar data for a given month.
+    Returns day numbers, dates, and weekday indices for the current month.
+    
+    Args:
+        year: Year (defaults to current year)
+        month: Month (defaults to current month)
+    
+    Returns:
+        dict with keys:
+            - 'days': list of dicts with 'day', 'date' (YYYY-MM-DD), 'weekday' (0=Monday)
+            - 'month_name': full month name
+            - 'year': year
+            - 'month': month number
+    """
+    today = date.today()
+    if year is None:
+        year = today.year
+    if month is None:
+        month = today.month
+    
+    # Get first day of month and number of days
+    first_day_weekday, num_days = monthrange(year, month)
+    # Convert from Monday=0 to Sunday=0 (calendar module uses Monday=0)
+    first_day_weekday = (first_day_weekday + 1) % 7
+    
+    days = []
+    for day in range(1, num_days + 1):
+        day_date = date(year, month, day)
+        days.append({
+            'day': day,
+            'date': day_date.strftime('%Y-%m-%d'),
+            'weekday': day_date.weekday()  # Monday=0, Sunday=6
+        })
+    
+    month_name = date(year, month, 1).strftime('%B')
+    
+    return {
+        'days': days,
+        'month_name': month_name,
+        'year': year,
+        'month': month,
+        'first_day_weekday': first_day_weekday,
+        'num_days': num_days
+    }
+
+
+def format_event_time(time_str):
+    """
+    Formats time string for display.
+    
+    Args:
+        time_str: Time in HH:MM format
+    
+    Returns:
+        Formatted time string (e.g., "2:30 PM" or "14:30")
+    """
+    try:
+        # Parse HH:MM format
+        hour, minute = map(int, time_str.split(':'))
+        if hour == 0:
+            return f"12:{minute:02d} AM"
+        elif hour < 12:
+            return f"{hour}:{minute:02d} AM"
+        elif hour == 12:
+            return f"12:{minute:02d} PM"
+        else:
+            return f"{hour - 12}:{minute:02d} PM"
+    except:
+        return time_str
