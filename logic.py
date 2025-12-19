@@ -5,7 +5,7 @@ Handles translation, image compression, and Word document generation
 
 from io import BytesIO
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from deep_translator import GoogleTranslator
 from datetime import datetime, date
@@ -16,15 +16,28 @@ from PIL import Image
 def compress_image(image_file, max_width=800):
     """
     Takes a huge image file, resizes it, and returns a compressed byte stream.
+    Handles PNG transparency to prevent crashes.
     """
-    image = Image.open(image_file)
-    width_percent = (max_width / float(image.size[0]))
-    new_height = int((float(image.size[1]) * float(width_percent)))
-    image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
-    img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='JPEG', quality=70, optimize=True)
-    img_byte_arr.seek(0)
-    return img_byte_arr
+    try:
+        image = Image.open(image_file)
+
+        # 1. FIX PNG CRASH: Convert RGBA (Transparent) to RGB (Solid)
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+
+        # 2. Resize
+        width_percent = (max_width / float(image.size[0]))
+        new_height = int((float(image.size[1]) * float(width_percent)))
+        image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+        # 3. Save
+        img_byte_arr = BytesIO()
+        image.save(img_byte_arr, format='JPEG', quality=70, optimize=True)
+        img_byte_arr.seek(0)
+        return img_byte_arr
+    except Exception as e:
+        print(f"Image compression error: {e}")
+        return None
 
 
 def process_report(client_name, general_notes, defect_list, should_translate, report_mode='standard'):
@@ -96,7 +109,6 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
         hdr_cells[0].text = t("ID")
         hdr_cells[1].text = t("Category")
 
-        # Key Change: Header Text
         if report_mode == 'defensive':
             hdr_cells[2].text = t("Claim vs. Finding")
         else:
@@ -116,23 +128,39 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
             desc = defect.get('desc', '')
 
             if report_mode == 'defensive':
-                # Format: "CLAIM: [Title] \n REBUTTAL: [Desc]"
                 full_text = f"CLAIM: {title}\n\nFINDING: {desc}"
             else:
                 full_text = f"{title}\n{desc}"
 
             row_cells[2].text = t(full_text)
 
-            # INSERT PHOTO (if exists)
-            if 'photo' in defect and defect['photo']:
+            # --- INSERT PHOTOS (Robust Logic) ---
+
+            # Case A: Multiple Photos (New System)
+            if 'photos' in defect and defect['photos']:
+                try:
+                    paragraph = row_cells[2].paragraphs[0]
+                    for photo_file in defect['photos']:
+                        compressed = compress_image(photo_file)
+                        if compressed:
+                            run = paragraph.add_run()
+                            run.add_break()
+                            run.add_picture(compressed, width=Inches(1.5))
+                            run.add_text("  ")  # Space between images
+                except Exception as e:
+                    print(f"Error adding photos: {e}")
+
+            # Case B: Single Photo (Old System - Backwards Compatibility)
+            elif 'photo' in defect and defect['photo']:
                 try:
                     compressed = compress_image(defect['photo'])
-                    p = row_cells[2].paragraphs[0]
-                    r = p.add_run()
-                    r.add_break()
-                    r.add_picture(compressed, width=Inches(1.5))
-                except:
-                    pass
+                    if compressed:
+                        p = row_cells[2].paragraphs[0]
+                        r = p.add_run()
+                        r.add_break()
+                        r.add_picture(compressed, width=Inches(1.5))
+                except Exception as e:
+                    print(f"Error adding single photo: {e}")
 
             row_cells[3].text = defect.get('code', '-')
             row_cells[4].text = t("Medium")
