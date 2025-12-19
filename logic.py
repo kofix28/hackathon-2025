@@ -1,84 +1,150 @@
 """
-Backend Logic for Sabaza Optimizer
-Handles translation and Word document generation
+Backend Logic for FieldScribe
+Handles translation, image compression, and Word document generation
 """
 
 from io import BytesIO
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from deep_translator import GoogleTranslator
+from datetime import datetime
+from PIL import Image
 
 
-def process_report(client_name, notes, should_translate):
+def compress_image(image_file, max_width=800):
     """
-    Processes inspection notes and generates a court-ready Word document.
-
-    Args:
-        client_name (str): The name of the client/property
-        notes (str): The inspection notes (original language)
-        should_translate (bool): Whether to translate to Arabic
-
-    Returns:
-        BytesIO: A buffer containing the generated Word document
-
-    Raises:
-        ValueError: If translation fails or document creation encounters an error
+    Takes a huge image file, resizes it, and returns a compressed byte stream.
     """
+    image = Image.open(image_file)
+    width_percent = (max_width / float(image.size[0]))
+    new_height = int((float(image.size[1]) * float(width_percent)))
+    image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
+    img_byte_arr = BytesIO()
+    image.save(img_byte_arr, format='JPEG', quality=70, optimize=True)
+    img_byte_arr.seek(0)
+    return img_byte_arr
 
-    # Step 1: Translate notes if requested
-    final_notes = notes
-    if should_translate and notes.strip():
-        try:
-            # Translating from auto-detect to Arabic
-            translator = GoogleTranslator(source='auto', target='ar')
-            final_notes = translator.translate(notes)
-        except Exception as e:
-            # If translation fails, keep original text and append error
-            final_notes = f"{notes}\n\n[Translation Error: {str(e)}]"
 
-    # Step 2: Create a new Word Document
+def process_report(client_name, general_notes, defect_list, should_translate, report_mode='standard'):
+    """
+    Generates the Word Doc. Adapts headers based on 'report_mode'.
+    """
     doc = Document()
 
-    # Step 3: Add Title
-    title = doc.add_heading(f'Inspection Report: {client_name}', level=1)
+    # --- HELPER: Translator ---
+    def t(text):
+        if should_translate and text:
+            try:
+                return GoogleTranslator(source='auto', target='ar').translate(text)
+            except:
+                return text
+        return text
+
+    # --- STYLE SETUP ---
+    try:
+        style = doc.styles['Normal']
+        style.font.name = 'Calibri'
+        style.font.size = Pt(11)
+    except:
+        pass
+
+    # --- HEADER ---
+    header_section = doc.sections[0]
+    header = header_section.header
+    htable = header.add_table(1, 2, width=Inches(6))
+    htable.autofit = False
+    htable.columns[0].width = Inches(4)
+    htable.columns[1].width = Inches(2)
+    htable.cell(0, 0).text = "FIELDSCRIBE INSPECTION SYSTEM"
+    htable.cell(0, 1).text = datetime.now().strftime("%Y-%m-%d")
+
+    # --- TITLE PAGE ---
+    title_text = f"DEFENSIVE OPINION: {client_name.upper()}" if report_mode == 'defensive' else f"INSPECTION REPORT: {client_name.upper()}"
+    title = doc.add_heading(t(title_text), 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if title.runs:
-        title_run = title.runs[0]
-        title_run.font.color.rgb = RGBColor(31, 78, 121)  # Professional blue
 
-    # Step 4: Add Findings Heading
-    findings_heading = doc.add_heading('Findings', level=2)
-    if findings_heading.runs:
-        findings_run = findings_heading.runs[0]
-        findings_run.font.color.rgb = RGBColor(31, 78, 121)
+    meta_table = doc.add_table(rows=1, cols=2)
+    meta_table.style = 'Table Grid'
+    meta_table.rows[0].cells[0].text = t(f"Property: {client_name}")
+    meta_table.rows[0].cells[1].text = t(f"Inspector: Field Engineer")
+    doc.add_paragraph()
 
-    # Step 5: Add the inspection notes
-    notes_paragraph = doc.add_paragraph(final_notes)
-    # If Arabic, align Right. If not, align Left.
-    if should_translate:
-        notes_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    # --- 1. EXECUTIVE SUMMARY ---
+    doc.add_heading(t("1. EXECUTIVE SUMMARY"), level=1)
+    if general_notes:
+        doc.add_paragraph(t(general_notes))
     else:
-        notes_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        doc.add_paragraph(t("No specific general notes provided."))
+    doc.add_paragraph()
 
-    if notes_paragraph.runs:
-        notes_run = notes_paragraph.runs[0]
-        notes_run.font.size = Pt(11)
+    # --- 2. DETAILED FINDINGS ---
+    # Dynamic Heading
+    heading_text = "2. DEFENSIVE REBUTTAL & FINDINGS" if report_mode == 'defensive' else "2. FINDINGS & DEFECTS"
+    doc.add_heading(t(heading_text), level=1)
 
-    # Step 6: Add a footer with metadata
-    doc.add_paragraph()  # Spacer
-    footer = doc.add_paragraph('Generated by Sabaza Optimizer')
-    footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    if footer.runs:
-        footer_run = footer.runs[0]
-        footer_run.font.size = Pt(8)
-        footer_run.font.italic = True
-        footer_run.font.color.rgb = RGBColor(128, 128, 128)  # Gray
+    if defect_list:
+        table = doc.add_table(rows=1, cols=5)
+        try:
+            table.style = 'Light Shading Accent 1'
+        except:
+            table.style = 'Table Grid'
 
-    # Step 7: Save to Memory (CRITICAL STEP)
-    # We use BytesIO to save the file in RAM instead of on the hard drive
+        # --- DYNAMIC HEADERS ---
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = t("ID")
+        hdr_cells[1].text = t("Category")
+
+        # Key Change: Header Text
+        if report_mode == 'defensive':
+            hdr_cells[2].text = t("Claim vs. Finding")
+        else:
+            hdr_cells[2].text = t("Defect Description")
+
+        hdr_cells[3].text = t("Standard")
+        hdr_cells[4].text = t("Severity")
+
+        # Fill Data
+        for i, defect in enumerate(defect_list):
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(i + 1).zfill(2)
+            row_cells[1].text = t(defect.get('category', 'General'))
+
+            # FORMATTING THE DESCRIPTION
+            title = defect.get('title', '')
+            desc = defect.get('desc', '')
+
+            if report_mode == 'defensive':
+                # Format: "CLAIM: [Title] \n REBUTTAL: [Desc]"
+                full_text = f"CLAIM: {title}\n\nFINDING: {desc}"
+            else:
+                full_text = f"{title}\n{desc}"
+
+            row_cells[2].text = t(full_text)
+
+            # INSERT PHOTO (if exists)
+            if 'photo' in defect and defect['photo']:
+                try:
+                    compressed = compress_image(defect['photo'])
+                    p = row_cells[2].paragraphs[0]
+                    r = p.add_run()
+                    r.add_break()
+                    r.add_picture(compressed, width=Inches(1.5))
+                except:
+                    pass
+
+            row_cells[3].text = defect.get('code', '-')
+            row_cells[4].text = t("Medium")
+    else:
+        doc.add_paragraph(t("No items recorded."))
+
+    # --- 3. DISCLAIMER ---
+    doc.add_page_break()
+    doc.add_heading(t("3. LIMITATIONS & DISCLAIMER"), level=1)
+    disclaimer_text = "This report is a visual inspection only. Opinions are based on the condition at the time of inspection."
+    p = doc.add_paragraph(t(disclaimer_text))
+
     buffer = BytesIO()
     doc.save(buffer)
-    buffer.seek(0)  # Rewind the buffer to the beginning so it can be read
-
+    buffer.seek(0)
     return buffer

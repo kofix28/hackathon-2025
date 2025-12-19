@@ -1,55 +1,68 @@
 import streamlit as st
-from ui_components import draw_header, render_form
-from logic import process_report
+import ui_components
+import logic
 
-# Page Config (Make it look like a real app)
-st.set_page_config(page_title="Sabaza Optimizer", page_icon="🚀", layout="centered")
+# Page Config (Must be the first command)
+st.set_page_config(page_title="FieldScribe", page_icon="🏗️", layout="wide")
+
 
 def main():
-    # Initialize session state (Memory)
-    if 'report_generated' not in st.session_state:
-        st.session_state.report_generated = False
-        st.session_state.report_buffer = None
+    # --- SESSION STATE SETUP ---
+    # We use this to remember data between pages
+    if 'page' not in st.session_state:
+        st.session_state.page = 'home'
+    if 'report_mode' not in st.session_state:
+        st.session_state.report_mode = 'standard'  # Options: 'standard', 'defensive'
+    if 'selected_defects' not in st.session_state:
+        st.session_state.selected_defects = []
+    if 'client_name' not in st.session_state:
         st.session_state.client_name = ""
 
-    # 1. Draw UI
-    draw_header()
-    client_name, translate_to_arabic, inspection_notes = render_form()
+    # --- NAVIGATION ---
 
-    # 2. Buttons Layout
-    col1, col2 = st.columns([1, 1])
+    # PAGE 1: HOME SCREEN
+    if st.session_state.page == 'home':
+        ui_components.render_home_screen()
 
-    with col1:
-        if st.button("🚀 Generate Report", use_container_width=True, type="primary"):
-            if not client_name.strip():
-                st.error("❌ Please enter a Client Name")
-            elif not inspection_notes.strip():
-                st.error("❌ Please enter Inspection Notes")
+    # PAGE 2: INSPECTION DECK (Adapts to Mode)
+    elif st.session_state.page == 'deck':
+        ui_components.render_inspection_deck()
+
+    # PAGE 3: REVIEW & GENERATE
+    elif st.session_state.page == 'review':
+        client_name, notes, translate = ui_components.render_review_screen()
+
+        # The Generate Button
+        if st.button("🚀 Generate Final Report", type="primary", use_container_width=True):
+            if not client_name:
+                st.error("Please enter a Client Name first.")
             else:
-                with st.spinner("⏳ Processing..."):
-                    # Call the Logic File
-                    report_buffer = process_report(
-                        client_name=client_name,
-                        notes=inspection_notes,
-                        should_translate=translate_to_arabic
-                    )
-                    
-                    # Save to Memory
-                    st.session_state.report_generated = True
-                    st.session_state.report_buffer = report_buffer
-                    st.session_state.client_name = client_name
-                    st.success("✅ Report Ready!")
+                with st.spinner("Generating Word Document..."):
+                    try:
+                        # Call Backend with all data including report_mode
+                        buffer = logic.process_report(
+                            client_name,
+                            notes,
+                            st.session_state.selected_defects,
+                            translate,
+                            st.session_state.report_mode
+                        )
 
-    # 3. The Download Button (Only shows after generation)
-    with col2:
-        if st.session_state.report_generated:
-            st.download_button(
-                label="📥 Download Word Doc",
-                data=st.session_state.report_buffer,
-                file_name=f"Report_{st.session_state.client_name}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+                        st.success("Report Ready!")
+                        st.download_button(
+                            label="📥 Download .docx",
+                            data=buffer,
+                            file_name=f"FieldScribe_{client_name}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                    except Exception as e:
+                        st.error(f"Error generating report: {e}")
+
+        # Back Button
+        if st.button("← Back to Deck"):
+            st.session_state.page = 'deck'
+            st.rerun()
+
 
 if __name__ == "__main__":
     main()
