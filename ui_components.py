@@ -91,6 +91,33 @@ def render_inspection_deck():
 
     # --- CUSTOM DEFECT CREATOR (No 'st.form' to allow camera interactions) ---
     with st.expander("➕ Add Item", expanded=True):
+        with st.form("custom_defect_form", clear_on_submit=True):
+            # 1. Text Inputs
+            c_title = st.text_input(lbl_title, placeholder=lbl_ph_title)
+            c_desc = st.text_area(lbl_desc)
+
+            # 2. Category & Photo
+            c_cat = st.selectbox("Category", ["Structural", "Electrical", "Plumbing", "Finishing", "Safety", "General"])
+            c_photo = st.file_uploader("Attach Photo (Proof)", type=['png', 'jpg', 'jpeg'])
+
+            # 3. Standard Code (Tekken) Dropdown
+            common_codes = [
+                "Other (Manual Input)",
+                "SI-1142 (Guardrails)",
+                "SI-1205 (Plumbing)",
+                "SI-1555 (Tiling)",
+                "SI-1752 (Partition Walls)",
+                "SI-1928 (Painting)",
+                "SI-900 (Electrical)"
+            ]
+            c_code_selection = st.selectbox("Standard (Tekken)", common_codes)
+
+            # Logic for 'Other' code
+            if "Other" in c_code_selection:
+                c_code_input = st.text_input("Enter Manual Code")
+                c_code = c_code_input if c_code_input else "-"
+            else:
+                c_code = c_code_selection.split(" ")[0]
         st.write("#### New Entry")
 
         # 1. Inputs (Linked to Session State)
@@ -181,6 +208,8 @@ def render_inspection_deck():
                     "photos": final_photos,
                     "mode": mode
                 })
+                st.rerun()
+                #st.success(f"Added: {c_title}")
 
                 # RESET FORM
                 st.session_state.temp_title = ""
@@ -243,9 +272,26 @@ def render_review_screen():
     else:
         for i, item in enumerate(st.session_state.selected_defects):
             with st.container(border=True):
-                c1, c2, c3 = st.columns([1, 4, 1])
-                with c1:
+                c_img, c_txt, c_del = st.columns([2, 6, 1])
+                with c_img:
                     st.write(f"**#{i + 1}**")
+
+                    photos = item.get("photo")
+
+                    if photos:
+                        # أكثر من صورة
+                        if isinstance(photos, (list, tuple)):
+                            per_row = 2  # خليهم 2 جنب بعض داخل عمود الصور
+                            for start in range(0, len(photos), per_row):
+                                row = photos[start:start + per_row]
+                                cols = st.columns(len(row))
+                                for col, img in zip(cols, row):
+                                    with col:
+                                        st.image(img, use_column_width=True)
+                        # صورة واحدة
+                        else:
+                            st.image(photos, use_column_width=True)
+                with c_txt:
                     # Check for photos
                     has_photos = ('photos' in item and item['photos']) or ('photo' in item and item['photo'])
                     if has_photos:
@@ -255,7 +301,7 @@ def render_review_screen():
                     st.write(f"**{lbl} {item['title']}** ({item['category']})")
                     st.caption(item['desc'])
                     st.caption(f"Code: {item.get('code', '-')}")
-                with c3:
+                with c_del:
                     if st.button("🗑️", key=f"del_{i}"):
                         st.session_state.selected_defects.pop(i)
                         st.rerun()
