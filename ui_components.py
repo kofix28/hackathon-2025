@@ -70,7 +70,7 @@ def render_inspection_deck():
 
     # --- CUSTOM DEFECT CREATOR ---
     with st.expander("➕ Add Item", expanded=True):
-        with st.form("custom_defect_form"):
+        with st.form("custom_defect_form", clear_on_submit=True):
             # 1. Text Inputs
             c_title = st.text_input(lbl_title, placeholder=lbl_ph_title)
             c_desc = st.text_area(lbl_desc)
@@ -111,7 +111,8 @@ def render_inspection_deck():
                     "photo": c_photo,
                     "mode": mode
                 })
-                st.success(f"Added: {c_title}")
+                st.rerun()
+                #st.success(f"Added: {c_title}")
 
     # --- STANDARD DEFECT CARDS (Only show in Standard Mode usually, but keeping for demo) ---
     if not is_defensive:
@@ -165,18 +166,31 @@ def render_review_screen():
     else:
         for i, item in enumerate(st.session_state.selected_defects):
             with st.container(border=True):
-                c1, c2, c3 = st.columns([1, 4, 1])
-                with c1:
+                c_img, c_txt, c_del = st.columns([2, 6, 1])
+                with c_img:
                     st.write(f"**#{i + 1}**")
-                    if 'photo' in item and item['photo']:
-                        st.caption("📸 Photo")
-                with c2:
-                    # Dynamic Label based on mode
+
+                    photos = item.get("photo")
+
+                    if photos:
+                        # أكثر من صورة
+                        if isinstance(photos, (list, tuple)):
+                            per_row = 2  # خليهم 2 جنب بعض داخل عمود الصور
+                            for start in range(0, len(photos), per_row):
+                                row = photos[start:start + per_row]
+                                cols = st.columns(len(row))
+                                for col, img in zip(cols, row):
+                                    with col:
+                                        st.image(img, use_column_width=True)
+                        # صورة واحدة
+                        else:
+                            st.image(photos, use_column_width=True)
+                with c_txt:
                     lbl = "Claim:" if st.session_state.report_mode == 'defensive' else "Defect:"
                     st.write(f"**{lbl} {item['title']}** ({item['category']})")
                     st.caption(item['desc'])
                     st.caption(f"Code: {item.get('code', '-')}")
-                with c3:
+                with c_del:
                     if st.button("🗑️", key=f"del_{i}"):
                         st.session_state.selected_defects.pop(i)
                         st.rerun()
