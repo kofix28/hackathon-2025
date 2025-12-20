@@ -19,16 +19,39 @@ def main():
     # CRM State
     if 'crm_events' not in st.session_state:
         st.session_state.crm_events = {}
+    if 'selected_calendar_date' not in st.session_state:
+        st.session_state.selected_calendar_date = None
     if 'customer_count' not in st.session_state:
         st.session_state.customer_count = 150
     if 'monthly_revenue' not in st.session_state:
         st.session_state.monthly_revenue = 45000
     if 'demo_users' not in st.session_state:
-        # Pre-fill some demo users for the UI
+        # Pre-fill demo users with minimal file data for MVP
         st.session_state.demo_users = {
-            'user1': {'name': 'John Smith', 'email': 'john@example.com', 'role': 'Engineer',
-                      'files': [{'name': 'Report1.docx', 'date': '2024-01-01', 'size': '2MB'}]},
-            'user2': {'name': 'Sarah Johnson', 'email': 'sarah@example.com', 'role': 'Inspector', 'files': []}
+            'user1': {
+                'name': 'John Smith',
+                'email': 'john.smith@example.com',
+                'role': 'Engineer',
+                'files': [
+                    {'name': 'Inspection_Report_2024_01.docx', 'date': '2024-01-15', 'size': '2.3 MB'}
+                ]
+            },
+            'user2': {
+                'name': 'Sarah Johnson',
+                'email': 'sarah.j@example.com',
+                'role': 'Senior Inspector',
+                'files': [
+                    {'name': 'Building_Inspection_2024_02.docx', 'date': '2024-02-20', 'size': '3.1 MB'}
+                ]
+            },
+            'user3': {
+                'name': 'Michael Chen',
+                'email': 'm.chen@example.com',
+                'role': 'Field Engineer',
+                'files': [
+                    {'name': 'Property_Inspection_2024_03.docx', 'date': '2024-03-10', 'size': '2.9 MB'}
+                ]
+            }
         }
     if 'selected_user' not in st.session_state:
         st.session_state.selected_user = None
