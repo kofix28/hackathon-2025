@@ -63,7 +63,7 @@ TEKUN_STANDARDS = [
 
 def render_home_screen():
     """Renders the landing page with the two big options."""
-    st.title("FieldScribe")
+    st.title("Civil+")
     st.write("Select your report type:")
     st.divider()
 
@@ -399,8 +399,8 @@ def render_inspection_deck():
                 st.session_state.temp_tool_photos = []
                 st.session_state.selected_tool_url = ""
                 st.session_state.tool_results = []
-                st.session_state.tool_name = ""
-                st.session_state.tool_desc = ""
+                #st.session_state.tool_name = ""
+                #st.session_state.tool_desc = ""
 
                 st.success("Item Added!")
                 st.rerun()

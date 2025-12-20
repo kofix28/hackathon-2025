@@ -3,7 +3,7 @@ import ui_components
 import logic
 
 # Page Config (Must be the first command)
-st.set_page_config(page_title="FieldScribe", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="Civil+", page_icon="🏗️", layout="wide")
 
 
 def main():
