@@ -45,7 +45,7 @@ def main():
 
     # PAGE 3: REVIEW
     elif st.session_state.page == 'review':
-        client_name, notes, translate = ui_components.render_review_screen()
+        client_name, notes, translate, logo_file = ui_components.render_review_screen()
 
         if st.button("🚀 Generate Final Report", type="primary", use_container_width=True):
             if not client_name:
@@ -58,7 +58,8 @@ def main():
                             notes,
                             st.session_state.selected_defects,
                             translate,
-                            st.session_state.report_mode
+                            st.session_state.report_mode,
+                            logo_file
                         )
                         st.success("Report Ready!")
                         st.download_button(
