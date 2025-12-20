@@ -374,7 +374,7 @@ def render_review_screen():
         with col1:
             st.session_state.client_name = st.text_input("Client / Property Name", value=st.session_state.client_name)
         with col2:
-            translate = st.checkbox("Translate Report to Hebrew?", value=False)
+            translate = st.checkbox("Translate Report to Arabic? ", value=False)
         notes = st.text_area("Additional General Notes", height=100)
 
     # Company Logo Section

@@ -83,7 +83,7 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
     def t(text):
         if should_translate and text:
             try:
-                return GoogleTranslator(source='auto', target='he').translate(text)
+                return GoogleTranslator(source='auto', target='ar').translate(text)
             except:
                 return text
         return text
