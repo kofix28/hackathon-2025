@@ -7,6 +7,9 @@ from io import BytesIO
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_SECTION
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from deep_translator import GoogleTranslator
 from datetime import datetime, date
 from calendar import monthrange
@@ -44,17 +47,43 @@ def compress_image(image_file, max_width=800):
         return None
 
 
-def process_report(client_name, general_notes, defect_list, should_translate, report_mode='standard'):
+def set_paragraph_rtl_bidi(paragraph):
     """
-    Generates the Word Doc. Adapts headers based on 'report_mode'.
+    Sets paragraph alignment to right and adds bidi property for Hebrew RTL support.
+    """
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    # Add bidi element
+    pPr = paragraph._element.get_or_add_pPr()
+    bidi = OxmlElement('w:bidi')
+    bidi.set(qn('w:val'), '1')
+    pPr.append(bidi)
+
+
+def process_report(client_name, general_notes, defect_list, should_translate, report_mode='standard', logo_file=None):
+    """
+    Generates the Word Doc with professional card-based layout.
     """
     doc = Document()
+
+    # Get page dimensions for full-width logo
+    section = doc.sections[0]
+    content_width = section.page_width - section.left_margin - section.right_margin
+
+    # Add logo at the top of the document if provided
+    if logo_file:
+        logo_paragraph = doc.add_paragraph()
+        set_paragraph_rtl_bidi(logo_paragraph)
+        compressed_logo = compress_image(logo_file, max_width=600)  # Higher quality for full width
+        if compressed_logo:
+            run = logo_paragraph.add_run()
+            run.add_picture(compressed_logo, width=content_width)  # Full content width
+        doc.add_paragraph()  # Add space after logo
 
     # --- HELPER: Translator ---
     def t(text):
         if should_translate and text:
             try:
-                return GoogleTranslator(source='auto', target='ar').translate(text)
+                return GoogleTranslator(source='auto', target='he').translate(text)
             except:
                 return text
         return text
@@ -67,114 +96,189 @@ def process_report(client_name, general_notes, defect_list, should_translate, re
     except:
         pass
 
-    # --- HEADER ---
-    header_section = doc.sections[0]
-    header = header_section.header
+    # --- HEADER & FOOTER ---
+    section = doc.sections[0]
+    header = section.header
     htable = header.add_table(1, 2, width=Inches(6))
     htable.autofit = False
     htable.columns[0].width = Inches(4)
     htable.columns[1].width = Inches(2)
-    htable.cell(0, 0).text = "FIELDSCRIBE INSPECTION SYSTEM"
+    htable.cell(0, 0).text = f"Project ID: {client_name} | Engineer: איסמאיל ראבי"
     htable.cell(0, 1).text = datetime.now().strftime("%Y-%m-%d")
 
+    footer = section.footer
+    ftable = footer.add_table(1, 1, width=Inches(6))
+    ftable.cell(0, 0).text = "Page "
+    # Add page number field
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    fldChar1 = OxmlElement('w:fldChar')
+    fldChar1.set(qn('w:fldCharType'), 'begin')
+    run._r.append(fldChar1)
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    instrText = OxmlElement('w:instrText')
+    instrText.text = "PAGE"
+    run._r.append(instrText)
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    fldChar2 = OxmlElement('w:fldChar')
+    fldChar2.set(qn('w:fldCharType'), 'separate')
+    run._r.append(fldChar2)
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    fldChar3 = OxmlElement('w:fldChar')
+    fldChar3.set(qn('w:fldCharType'), 'end')
+    run._r.append(fldChar3)
+    ftable.cell(0, 0).paragraphs[0].add_run(" of ")
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    fldChar1 = OxmlElement('w:fldChar')
+    fldChar1.set(qn('w:fldCharType'), 'begin')
+    run._r.append(fldChar1)
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    instrText = OxmlElement('w:instrText')
+    instrText.text = "NUMPAGES"
+    run._r.append(instrText)
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    fldChar2 = OxmlElement('w:fldChar')
+    fldChar2.set(qn('w:fldCharType'), 'separate')
+    run._r.append(fldChar2)
+    run = ftable.cell(0, 0).paragraphs[0].add_run()
+    fldChar3 = OxmlElement('w:fldChar')
+    fldChar3.set(qn('w:fldCharType'), 'end')
+    run._r.append(fldChar3)
+    # Set footer paragraph RTL and bidi
+    set_paragraph_rtl_bidi(ftable.cell(0, 0).paragraphs[0])
+
     # --- TITLE PAGE ---
-    title_text = f"DEFENSIVE OPINION: {client_name.upper()}" if report_mode == 'defensive' else f"INSPECTION REPORT: {client_name.upper()}"
-    title = doc.add_heading(t(title_text), 0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
     meta_table = doc.add_table(rows=1, cols=2)
-    meta_table.style = 'Table Grid'
-    meta_table.rows[0].cells[0].text = t(f"Property: {client_name}")
-    meta_table.rows[0].cells[1].text = t(f"Inspector: Field Engineer")
+    meta_cell = meta_table.rows[0].cells[0]
+    # Special design for client name
+    run1 = meta_cell.paragraphs[0].add_run(t("שם הלקוח: "))
+    run1.bold = True
+    run1.font.size = Pt(12)
+    run2 = meta_cell.paragraphs[0].add_run(client_name)
+    run2.font.size = Pt(12)
+    set_paragraph_rtl_bidi(meta_cell.paragraphs[0])
     doc.add_paragraph()
+    title_text = f"DEFENSIVE OPINION: {client_name.upper()}" if report_mode == 'defensive' else f" : להלן חוות דעתי"
+    title_paragraph = doc.add_paragraph()
+    title_run = title_paragraph.add_run(t(title_text))
+    title_run.bold = True
+    title_run.underline = True
+    title_run.font.size = Pt(16)  # Larger size for title appearance
+    set_paragraph_rtl_bidi(title_paragraph)
 
-    # --- 1. EXECUTIVE SUMMARY ---
-    doc.add_heading(t("1. EXECUTIVE SUMMARY"), level=1)
-    if general_notes:
-        doc.add_paragraph(t(general_notes))
-    else:
-        doc.add_paragraph(t("No specific general notes provided."))
-    doc.add_paragraph()
+    
+
+ 
+
+  
 
     # --- 2. DETAILED FINDINGS ---
-    heading_text = "2. DEFENSIVE REBUTTAL & FINDINGS" if report_mode == 'defensive' else "2. FINDINGS & DEFECTS"
-    doc.add_heading(t(heading_text), level=1)
+    heading2 = doc.add_heading(t(" ממצאים מפורטים"), level=1)
+    set_paragraph_rtl_bidi(heading2)
+
+    image_counter = 1
 
     if defect_list:
-        table = doc.add_table(rows=1, cols=5)
-        try:
-            table.style = 'Light Shading Accent 1'
-        except:
-            table.style = 'Table Grid'
+        for defect in defect_list:
+            # 1. Yellow Highlight Box
+            yellow_table = doc.add_table(rows=1, cols=1)
+            yellow_table.autofit = False
+            yellow_table.columns[0].width = Inches(6)
+            cell = yellow_table.cell(0, 0)
+            cell.text = t(defect.get('title', 'Defect'))
+            # Yellow background
+            shading = OxmlElement('w:shd')
+            shading.set(qn('w:fill'), 'FFFF00')
+            cell._element.get_or_add_tcPr().append(shading)
+            # Bold, 14pt, centered
+            run = cell.paragraphs[0].runs[0]
+            run.font.bold = True
+            run.font.size = Pt(14)
+            set_paragraph_rtl_bidi(cell.paragraphs[0])
 
-        # --- HEADERS ---
-        hdr_cells = table.rows[0].cells
-        hdr_cells[0].text = t("ID")
-        hdr_cells[1].text = t("Category")
-
-        if report_mode == 'defensive':
-            hdr_cells[2].text = t("Claim vs. Finding")
-        else:
-            hdr_cells[2].text = t("Defect Description")
-
-        hdr_cells[3].text = t("Standard")
-        hdr_cells[4].text = t("Severity")
-
-        # --- FILL DATA ---
-        for i, defect in enumerate(defect_list):
-            row_cells = table.add_row().cells
-            row_cells[0].text = str(i + 1).zfill(2)
-            row_cells[1].text = t(defect.get('category', 'General'))
-
-            # FORMATTING THE DESCRIPTION
-            title = defect.get('title', '')
+            # 2. Problem Definition
             desc = defect.get('desc', '')
-
-            if report_mode == 'defensive':
-                full_text = f"CLAIM: {title}\n\nFINDING: {desc}"
+            if desc:
+                p = doc.add_paragraph(t(desc))
+                set_paragraph_rtl_bidi(p)
             else:
-                full_text = f"{title}\n{desc}"
+                for _ in range(3):
+                    p = doc.add_paragraph("")
+                    set_paragraph_rtl_bidi(p)
 
-            row_cells[2].text = t(full_text)
-
-            # --- INSERT PHOTOS (Robust Logic) ---
-
-            # Case A: Multiple Photos (New System)
-            if 'photos' in defect and defect['photos']:
-                try:
-                    paragraph = row_cells[2].paragraphs[0]
-                    for photo_file in defect['photos']:
-                        compressed = compress_image(photo_file)
-                        if compressed:
-                            run = paragraph.add_run()
-                            run.add_break()
-                            run.add_picture(compressed, width=Inches(1.5))
-                            run.add_text("  ")  # Space between images
-                except Exception as e:
-                    print(f"Error adding photos: {e}")
-
-            # Case B: Single Photo (Old System - Backwards Compatibility)
-            elif 'photo' in defect and defect['photo']:
-                try:
-                    compressed = compress_image(defect['photo'])
+            # 3. Evidence Grid
+            photos = defect.get('photos', [])
+            if not photos and 'photo' in defect:
+                photos = [defect['photo']]
+            if photos:
+                # Create table with 2 columns
+                num_rows = (len(photos) + 1) // 2
+                evidence_table = doc.add_table(rows=num_rows, cols=2)
+                evidence_table.style = 'Table Grid'  # Invisible borders? Actually, set to none
+                # To make invisible, perhaps no style or custom
+                for i, photo_file in enumerate(photos):
+                    row = i // 2
+                    col = 1 - (i % 2)  # RTL: Photo 1 right, Photo 2 left
+                    cell = evidence_table.cell(row, col)
+                    compressed = compress_image(photo_file)
                     if compressed:
-                        p = row_cells[2].paragraphs[0]
-                        r = p.add_run()
-                        r.add_break()
-                        r.add_picture(compressed, width=Inches(1.5))
-                except Exception as e:
-                    print(f"Error adding single photo: {e}")
+                        run = cell.paragraphs[0].add_run()
+                        run.add_picture(compressed, width=Inches(3))  # Half page width approx
+            else:
+                # Fallback: gray dashed box
+                fallback_table = doc.add_table(rows=1, cols=1)
+                fallback_table.autofit = False
+                fallback_table.columns[0].width = Inches(6)
+                cell = fallback_table.cell(0, 0)
+                cell.text = 'הדבק תמונה כאן'
+                set_paragraph_rtl_bidi(cell.paragraphs[0])
+                # Gray background, dashed border
+                shading = OxmlElement('w:shd')
+                shading.set(qn('w:fill'), 'D3D3D3')  # Light gray
+                cell._element.get_or_add_tcPr().append(shading)
+                # Dashed border
+                tcPr = cell._element.get_or_add_tcPr()
+                borders = OxmlElement('w:tcBorders')
+                for border_name in ['top', 'left', 'bottom', 'right']:
+                    border = OxmlElement(f'w:{border_name}')
+                    border.set(qn('w:val'), 'dashed')
+                    border.set(qn('w:sz'), '4')
+                    border.set(qn('w:space'), '0')
+                    border.set(qn('w:color'), '000000')
+                    borders.append(border)
+                tcPr.append(borders)
 
-            row_cells[3].text = defect.get('code', '-')
-            row_cells[4].text = t("Medium")
+            # 4. Standard Field
+            p = doc.add_paragraph()
+            standard = defect.get('code', '')
+            if standard:
+                p.add_run(t(standard))
+            else:
+                p.add_run('____________________')
+            set_paragraph_rtl_bidi(p)
+
+            # Large spacing between defects
+            doc.add_page_break()
+
     else:
-        doc.add_paragraph(t("No items recorded."))
+        p = doc.add_paragraph(t("No items recorded."))
+        set_paragraph_rtl_bidi(p)
 
-    # --- 3. DISCLAIMER ---
-    doc.add_page_break()
-    doc.add_heading(t("3. LIMITATIONS & DISCLAIMER"), level=1)
-    disclaimer_text = "This report is a visual inspection only. Opinions are based on the condition at the time of inspection."
-    p = doc.add_paragraph(t(disclaimer_text))
+    
+   # --- 1. EXECUTIVE SUMMARY ---
+    heading1 = doc.add_heading(t(" הערות : "), level=3)
+    set_paragraph_rtl_bidi(heading1)
+    if general_notes:
+        p = doc.add_paragraph(t(general_notes))
+        set_paragraph_rtl_bidi(p)
+    else:
+        p = doc.add_paragraph(t("No specific general notes provided."))
+        set_paragraph_rtl_bidi(p)
+    # --- ENGINEER’S SIGN-OFF ---
+    heading3 = doc.add_heading(t("המהנדס העורך והחותם: "), level=2)
+    set_paragraph_rtl_bidi(heading3)
+    p = doc.add_paragraph(t("חתימה: ___________________________"))
+    set_paragraph_rtl_bidi(p)
+    
 
     buffer = BytesIO()
     doc.save(buffer)

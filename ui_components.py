@@ -7,6 +7,57 @@ import streamlit as st
 import logic
 import streamlit.components.v1 as components
 from datetime import date, datetime
+from PIL import Image, ImageDraw, ImageFont
+import io
+try:
+    from streamlit_drawable_canvas import st_canvas
+    CANVAS_AVAILABLE = True
+except ImportError:
+    CANVAS_AVAILABLE = False
+
+def edit_image(image_file, canvas_data=None):
+    """
+    Edit image with canvas drawings.
+    """
+    try:
+        image = Image.open(image_file)
+        
+        if canvas_data is not None and canvas_data.image_data is not None:
+            # Get the drawing as PIL image
+            drawing = Image.fromarray(canvas_data.image_data.astype('uint8'), 'RGBA')
+            
+            # Composite the drawing onto the original image
+            if drawing.size != image.size:
+                drawing = drawing.resize(image.size, Image.Resampling.LANCZOS)
+            
+            # Create a mask from the alpha channel
+            mask = drawing.split()[-1]  # Alpha channel
+            
+            # Composite
+            image = Image.composite(drawing, image, mask)
+        
+        # Save to bytes
+        buf = io.BytesIO()
+        image.save(buf, format='PNG')
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        st.error(f"Error editing image: {e}")
+        return image_file
+
+# Sample Tekun standards (placeholder - replace with actual PDF extraction)
+TEKUN_STANDARDS = [
+    "SI-1142 (Guardrails) - Height requirements for guardrails",
+    "SI-1205 (Plumbing) - Pipe fitting leakage standards",
+    "SI-1555 (Tiling) - Cracked tile detection",
+    "SI-1752 (Partition Walls) - Moisture levels",
+    "SI-1928 (Painting) - Paint adhesion standards",
+    "SI-900 (Electrical) - Exposed wiring regulations",
+    "SI-2100 (Structural) - Load bearing requirements",
+    "SI-3050 (Safety) - Emergency exit standards",
+    "SI-4100 (Finishing) - Surface finish quality",
+    "SI-5200 (HVAC) - Ventilation requirements"
+]
 
 
 def render_home_screen():
@@ -134,27 +185,119 @@ def render_inspection_deck():
                 for i, pic in enumerate(st.session_state.temp_photos):
                     with cols[i % 4]:
                         st.image(pic, width=100)
+                        # Photo editing options
+                        with st.expander(f"Edit Photo {i+1}"):
+                            try:
+                                if CANVAS_AVAILABLE:
+                                    st.write("Draw on the image below:")
+                                    # Convert to PIL Image for canvas
+                                    img = Image.open(pic)
+                                    
+                                    # Create canvas
+                                    canvas_result = st_canvas(
+                                        fill_color="rgba(255, 165, 0, 0.3)",  # Orange fill
+                                        stroke_width=3,
+                                        stroke_color="red",
+                                        background_image=img,
+                                        update_streamlit=True,
+                                        height=400,
+                                        width=400,
+                                        drawing_mode="freedraw",
+                                        key=f"canvas_{i}",
+                                    )
+                                    
+                                    if canvas_result.image_data is not None:
+                                        if st.button(f"Apply Drawing to Photo {i+1}", key=f"edit_{i}"):
+                                            edited = edit_image(pic, canvas_result)
+                                            st.session_state.temp_photos[i] = edited
+                                            st.success("Drawing applied!")
+                                            st.rerun()
+                                else:
+                                    st.warning("Drawing tools not available. Please install streamlit-drawable-canvas.")
+                            except Exception as e:
+                                st.warning(f"Drawing tools are not compatible with this Streamlit version. Error: {str(e)}")
+                                st.info("As an alternative, you can upload edited photos directly.")
 
                 if st.button("🗑️ Clear Camera Photos"):
                     st.session_state.temp_photos = []
                     st.rerun()
 
-        # 4. Standard Code (Tekken)
-        common_codes = [
-            "Other (Manual Input)",
-            "SI-1142 (Guardrails)",
-            "SI-1205 (Plumbing)",
-            "SI-1555 (Tiling)",
-            "SI-1752 (Partition Walls)",
-            "SI-1928 (Painting)",
-            "SI-900 (Electrical)"
-        ]
-        c_code_selection = st.selectbox("Standard (Tekken)", common_codes)
+            # Show Uploaded Photos with editing
+            if uploaded_photos:
+                st.write("**Uploaded Photos:**")
+                cols = st.columns(4)
+                for i, pic in enumerate(uploaded_photos):
+                    with cols[i % 4]:
+                        st.image(pic, width=100)
+                        # Photo editing options
+                        with st.expander(f"Edit Uploaded {i+1}"):
+                            try:
+                                if CANVAS_AVAILABLE:
+                                    st.write("Draw on the image below:")
+                                    # Convert to PIL Image for canvas
+                                    img = Image.open(pic)
+                                    
+                                    # Create canvas
+                                    canvas_result = st_canvas(
+                                        fill_color="rgba(255, 165, 0, 0.3)",  # Orange fill
+                                        stroke_width=3,
+                                        stroke_color="red",
+                                        background_image=img,
+                                        update_streamlit=True,
+                                        height=400,
+                                        width=400,
+                                        drawing_mode="freedraw",
+                                        key=f"ucanvas_{i}",
+                                    )
+                                    
+                                    if canvas_result.image_data is not None:
+                                        if st.button(f"Apply Drawing to Uploaded {i+1}", key=f"uedit_{i}"):
+                                            edited = edit_image(pic, canvas_result)
+                                            uploaded_photos[i] = edited
+                                            st.success("Drawing applied!")
+                                            st.rerun()
+                                else:
+                                    st.warning("Drawing tools not available. Please install streamlit-drawable-canvas.")
+                            except Exception as e:
+                                st.warning(f"Drawing tools are not compatible with this Streamlit version. Error: {str(e)}")
+                                st.info("As an alternative, you can upload edited photos directly.")
 
-        if "Other" in c_code_selection:
-            c_code = st.text_input("Enter Manual Code", value="-")
+        # 4. Standard Code (Tekken) with Search
+        st.write("**Standard (Tekken) Selection**")
+        
+        # Search functionality
+        search_term = st.text_input("Search Tekun Standards", placeholder="Type keyword to search...")
+        if st.button("🔍 Search Standards"):
+            if search_term:
+                # Filter standards containing the search term
+                matching_standards = [std for std in TEKUN_STANDARDS if search_term.lower() in std.lower()]
+                if matching_standards:
+                    st.success(f"Found {len(matching_standards)} matching standards:")
+                    selected_from_search = st.selectbox("Select from search results:", matching_standards, key="search_select")
+                    c_code = selected_from_search.split(" ")[0]  # Extract code like SI-1142
+                else:
+                    st.warning("No standards found matching your search.")
+                    c_code = st.text_input("Enter Manual Code", value="-")
+            else:
+                st.warning("Please enter a search term.")
+                c_code = st.text_input("Enter Manual Code", value="-")
         else:
-            c_code = c_code_selection.split(" ")[0]
+            # Default selection
+            common_codes = [
+                "Other (Manual Input)",
+                "SI-1142 (Guardrails)",
+                "SI-1205 (Plumbing)",
+                "SI-1555 (Tiling)",
+                "SI-1752 (Partition Walls)",
+                "SI-1928 (Painting)",
+                "SI-900 (Electrical)"
+            ]
+            c_code_selection = st.selectbox("Quick Select Standard", common_codes)
+            
+            if "Other" in c_code_selection:
+                c_code = st.text_input("Enter Manual Code", value="-")
+            else:
+                c_code = c_code_selection.split(" ")[0]
 
         st.write("")  # Spacer
 
@@ -231,8 +374,16 @@ def render_review_screen():
         with col1:
             st.session_state.client_name = st.text_input("Client / Property Name", value=st.session_state.client_name)
         with col2:
-            translate = st.checkbox("Translate Report to Arabic?", value=False)
+            translate = st.checkbox("Translate Report to Hebrew?", value=False)
         notes = st.text_area("Additional General Notes", height=100)
+
+    # Company Logo Section
+    with st.container(border=True):
+        st.subheader("Company Logo")
+        st.write("Upload your company logo to include it in the report header.")
+        logo_file = st.file_uploader("Select Logo Image", type=['png', 'jpg', 'jpeg'], help="Recommended: PNG or JPG format, will be compressed automatically")
+        if logo_file:
+            st.image(logo_file, width=200, caption="Logo Preview")
 
     st.subheader("Items to Report")
 
@@ -271,7 +422,7 @@ def render_review_screen():
                         st.session_state.selected_defects.pop(i)
                         st.rerun()
 
-    return st.session_state.client_name, notes, translate
+    return st.session_state.client_name, notes, translate, logo_file
 
 
 # --- CRM DASHBOARD SECTION (Same as before) ---
