@@ -314,3 +314,23 @@ def get_calendar_month_data(year=None, month=None):
         'first_day_weekday': first_day_weekday,
         'num_days': num_days
     }
+
+
+def format_event_time(time_str):
+    """Formats a time string (HH:MM) to a readable format (H:MM AM/PM)."""
+    try:
+        # Parse time string (format: "HH:MM")
+        hour, minute = map(int, time_str.split(':'))
+        
+        # Convert to 12-hour format
+        if hour == 0:
+            return f"12:{minute:02d} AM"
+        elif hour < 12:
+            return f"{hour}:{minute:02d} AM"
+        elif hour == 12:
+            return f"12:{minute:02d} PM"
+        else:
+            return f"{hour - 12}:{minute:02d} PM"
+    except Exception:
+        # Return original string if parsing fails
+        return time_str
